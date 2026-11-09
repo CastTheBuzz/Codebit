@@ -1,0 +1,9 @@
+node_modules/
+.wrangler/
+.dev.vars
+setup/state.json
+CODEBIT-LINK.txt
+public/rt/py/
+public/rt/sql/
+public/rt/cc/
+dev/course-source.zip

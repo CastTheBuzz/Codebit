@@ -1,0 +1,819 @@
+@track devops | Cloud and DevOps | lab | Linux, Git, networking, Docker, automatic deploys and the cloud. Read the theory here, then do each lab on your own machines.
+@module Linux: finding your way around
+DevOps work happens in a terminal, usually on a Linux server with no desktop. These labs use your Arch laptop.
+
+**Before you start:** read a command before you run it, especially with `sudo` or `rm`. There is no bin in the terminal. Do experiments in a folder like `~/lab`.
+
+Everything is a file in one tree that starts at `/`.
+
+- `/etc`: system settings
+- `/home`: your files
+- `/var/log`: logs
+- `/usr`: installed programs
+- `/tmp`: temporary files
+
+```bash
+pwd                  # where am I
+ls -la               # list everything, with details
+cd ~/lab             # move
+mkdir -p a/b         # make folders
+cp x y; mv x y       # copy, move or rename
+rm file              # delete, no undo
+cat f; less f        # read a file
+man ls               # the manual
+```
+
+**Paths:** an absolute path starts at `/`. A relative path starts from where you are. `.` is here, `..` is one level up, `~` is your home.
+
+**Permissions:** `ls -l` shows something like `-rwxr-x---`. That is three groups: owner, group, everyone else. r = read, w = write, x = run. As numbers: r=4, w=2, x=1, so `chmod 750 f` means rwx, r-x, nothing.
+
+```bash
+chmod +x script.sh
+sudo chown kristian file
+```
+
+`sudo` runs one command as root, the all-powerful user. Use it only when needed.
+
+@task lab 1 Build a folder tree
+In `~/lab/shop`, make folders `src`, `logs` and `backup`, and some empty files inside `src`. Then move one file to `backup` and rename another. Use the terminal only.
+
+Done when `ls -R ~/lab/shop` shows the tree you meant to make.
+@hint
+`mkdir -p`, `touch`, `mv`, `ls -R`
+
+@task lab 1 Explore the system
+Without a browser, find out: your kernel version, how much disk and memory are free, how long the laptop has been on, and which user you are.
+
+Done when you can answer all four and could do it again from memory.
+@hint
+`uname -r`, `df -h`, `free -h`, `uptime`, `whoami`
+
+@task lab 2 Permissions on purpose
+Make a file only you can read. Make a script, try to run it before and after making it executable, and note the error. Then explain what `chmod 640` allows, without looking it up.
+
+Done when you saw "Permission denied" and fixed it yourself.
+@hint
+`chmod`, `ls -l`, `./script.sh`
+
+@module Text, pipes and search
+Linux tools do one small job each. A **pipe** `|` sends one program's output into the next.
+
+```bash
+cat log | grep ERROR | wc -l
+```
+
+Redirection:
+
+```bash
+cmd > file      # write output to a file, replacing it
+cmd >> file     # add to the end
+cmd 2> err      # errors only
+cmd > all 2>&1  # both
+```
+
+The tools you will use daily:
+
+- `grep -i word f`: find lines
+- `sort`, `uniq -c`: order and count
+- `head -5`, `tail -f`: start of a file, or follow it live
+- `cut -d, -f2`: pick a column
+- `sed 's/a/b/g'`: replace text
+- `awk '{print $1}'`: pick fields
+- `find . -name '*.log'`: find files
+- `du -sh *`: what is using the space
+- `journalctl -u name`: logs of a service
+
+The classic question "which IP hits us most?" takes one line:
+
+```bash
+awk '{print $1}' access.log | sort | uniq -c | sort -rn | head
+```
+
+@task lab 2 Your own log analysis
+Read your laptop's real system log with `journalctl`. Save the last 2,000 lines to a file. Then, using only pipes, find the 5 services that write the most lines.
+
+Done when a single command line prints the top 5 with their counts.
+@hint
+`journalctl -n`, `awk`, `sort`, `uniq -c`, `head`
+
+@task lab 2 Find what is eating your disk
+Find the 5 biggest folders in your home, and the 5 biggest files anywhere under it.
+
+Done when you know what is taking your space. Do not delete anything you do not recognise.
+@hint
+`du -h --max-depth=1`, `sort -h`, `find -type f -size`
+
+@task lab 2 Find and replace across files
+In `~/lab`, make 3 text files with the word `staging`. With one command, change it to `production` in all of them, then prove it with `grep`.
+
+Done when `grep -c` shows zero `staging` left.
+@hint
+`sed -i`, `grep -r`, `grep -c`
+
+@module Processes and services
+A running program is a **process**, with an id (PID).
+
+```bash
+ps aux | grep name
+top          # live view; htop is nicer
+kill PID     # ask it to stop
+kill -9 PID  # force it
+cmd &        # run in the background
+```
+
+**systemd** starts and looks after services on most Linux servers, Arch included.
+
+```bash
+systemctl status sshd
+sudo systemctl start sshd
+sudo systemctl enable sshd    # start at boot
+journalctl -u sshd -f         # follow its log
+```
+
+A service is described by a **unit file**:
+
+```ini
+[Unit]
+Description=My app
+After=network.target
+
+[Service]
+ExecStart=/home/kristian/lab/app.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Put it in `/etc/systemd/system/app.service`, then run `sudo systemctl daemon-reload`.
+
+A **timer** runs something on a schedule. It is the modern version of cron.
+
+@task lab 2 Catch a process
+Run `sleep 600` in the background. Find its PID without being told, see it in `top`, then stop it.
+
+Done when `ps` no longer shows it, and you can explain `kill` versus `kill -9`.
+@hint
+`&`, `jobs`, `ps aux | grep`, `kill`
+
+@task lab 3 Write your own service
+Write a small script that adds the time to a file every 10 seconds. Make it a systemd service that restarts if it fails. Kill the process and watch systemd bring it back.
+
+Done when the PID changes after you kill it, and `journalctl -u` shows the restart. Remove the service when you finish.
+@hint
+`/etc/systemd/system`, `Restart=always`, `RestartSec`, `daemon-reload`
+
+@task lab 3 Run it on a timer
+Replace the loop with a script that runs once, and a systemd timer that runs it every 5 minutes.
+
+Done when `systemctl list-timers` shows it, and the file gets new lines.
+@hint
+`.timer` file, `OnCalendar=*:0/5`, `systemctl enable --now`
+
+@module Bash scripting
+A script is commands in a file. Anything you do twice can become one.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail          # stop on errors, unset variables, failed pipes
+
+name="${1:-world}"         # first argument, with a default
+echo "hello $name"
+
+if [[ -f "$name" ]]; then
+    echo "file exists"
+fi
+
+for f in *.log; do
+    echo "$f"
+done
+
+count=$(wc -l < file.txt)  # save a command's output
+```
+
+Rules that prevent most bugs:
+
+- Quote variables: `"$x"`, or a name with a space splits in two.
+- Start with `set -euo pipefail`.
+- Every command returns an **exit code**. 0 means success. `$?` holds the last one.
+- `shellcheck script.sh` finds mistakes for you. Install it.
+
+Functions:
+
+```bash
+log() { echo "$(date +%T) $*"; }
+```
+
+@task lab 2 Backup script
+Write `backup.sh FOLDER` that makes a dated `.tar.gz` of the folder in `~/backups`, keeps only the newest 5, and exits with an error message if the folder does not exist.
+
+Done when running it 7 times leaves 5 archives, `shellcheck` is clean, and you restored one to check it.
+@hint
+`tar -czf`, `date +%F-%H%M%S`, `ls -t`, `tail -n +6`
+
+@task lab 3 Health check script
+Write `check.sh URL...` that tests each website, prints `OK` or `FAIL` with the response time, and exits with code 1 if any fail. Try it on your Readbit and Codebit links.
+
+Done when it fails correctly on a fake URL, and `echo $?` shows 1.
+@hint
+`curl -s -o /dev/null -w '%{http_code} %{time_total}'`, `exit 1`
+
+@task lab 3 System report
+Write a script that prints disk use, memory, top 3 processes by memory, and failed services. It should warn if any disk is over 80 percent full.
+
+Done when it runs on a timer and appends to a log file.
+@hint
+`df --output=pcent`, `ps --sort=-%mem`, `systemctl --failed`
+
+@module Git
+Git stores snapshots of your project. Every DevOps pipeline starts from it.
+
+```bash
+git status; git diff
+git add file; git commit -m "Say what changed"
+git log --oneline --graph
+git switch -c feature      # new branch
+git switch main
+git merge feature
+git pull; git push
+```
+
+Three areas: **working folder**, **staging area** (`git add`), **history** (`git commit`).
+
+Fixing mistakes:
+
+```bash
+git restore file           # throw away local changes
+git restore --staged file  # unstage
+git commit --amend         # fix the last commit
+git revert HASH            # new commit that undoes one
+git reset --hard HASH      # dangerous: drops work
+git reflog                 # find "lost" commits
+```
+
+`.gitignore` lists files Git should skip. **Never commit secrets.** Once pushed, treat a password as leaked and change it. Removing it later does not remove it from history.
+
+A **merge conflict** is Git asking you to choose. Open the file, keep what is right, delete the markers, `git add`, commit.
+
+Teams use **pull requests**: work on a branch, open a PR, get a review, merge.
+
+@task lab 1 Real history
+Make a repo in `~/lab/gitlab` with at least 6 commits and a clear message on each. Use a `.gitignore` for a `.env` file.
+
+Done when `git log --oneline` reads like a story, and `.env` is not tracked.
+@hint
+`git init`, `.gitignore`, `git status`
+
+@task lab 2 Cause a conflict and fix it
+Make two branches that change the same line. Merge them, get a conflict, and solve it by hand.
+
+Done when `git log --graph` shows the merge, and no conflict markers remain.
+@hint
+`git switch -c`, `git merge`, `git log --graph --oneline`
+
+@task lab 3 Recover lost work
+Make a commit, destroy it with `git reset --hard HEAD~1`, then get it back.
+
+Done when the file is back, and you can explain how the reflog made that possible.
+@hint
+`git reflog`, `git reset --hard HASH`
+
+@task lab 2 Pull request on your own repo
+On one of your GitHub repos, make a branch, push it, open a pull request, read your own diff, and merge it.
+
+Done when the PR shows as merged, and your local main is up to date.
+@hint
+`git push -u origin`, GitHub or the `gh` tool, `git pull`
+
+@module Networking
+Most production problems end up here. Learn to test each layer in order.
+
+- **IP address**: where a machine is. `192.168.x.x`, `10.x.x.x` and `100.x.x.x` (Tailscale) are private ranges.
+- **Port**: which program on that machine. 22 SSH, 80 HTTP, 443 HTTPS, 5432 Postgres.
+- **DNS**: turns a name into an IP.
+- **TCP**: a reliable connection. **UDP**: fast with no guarantee.
+- **HTTP**: requests and responses on top of TCP. **TLS** makes it HTTPS.
+- **Firewall**: decides which ports are reachable.
+
+Debugging order: name, machine, port, app.
+
+```bash
+ip a                     # my addresses
+ip route                 # my gateway
+ping host                # is the machine there
+dig example.com          # DNS
+ss -tlnp                 # which ports are listening here
+curl -v https://site     # the full HTTP exchange
+traceroute host          # the path
+```
+
+Status codes: 2xx fine, 3xx redirect, 4xx your request is wrong, 5xx the server failed. 502 and 504 usually mean a proxy cannot reach the app behind it.
+
+A server listening on `127.0.0.1` is reachable only from that machine. `0.0.0.0` means every network, so be careful with it.
+
+@task lab 1 Map your network
+Find your laptop's local IP, your router's IP, your public IP and your Tailscale IP. Then reach your PC or phone by Tailscale with `ping`.
+
+Done when you can explain why each of the four addresses is different.
+@hint
+`ip a`, `ip route`, `curl ifconfig.me`, `tailscale ip`
+
+@task lab 2 Follow a web request
+Pick your Codebit link. Find its IP, its DNS records, the TLS certificate issuer, and every response header.
+
+Done when you can describe what happens between pressing Enter and seeing the page.
+@hint
+`dig`, `curl -v`, `curl -I`
+
+@task lab 2 Run a server and reach it
+On the laptop, run `python -m http.server 8000`. Find it with `ss`. Reach it from the same machine, then from your phone over Tailscale. Next bind it to `127.0.0.1` and see the phone fail.
+
+Done when you can explain why the phone failed. Stop the server afterwards.
+@hint
+`--bind`, `ss -tlnp`, `tailscale ip`
+
+@module SSH and remote machines
+SSH gives you a secure terminal on another machine. It is how you reach servers.
+
+```bash
+ssh user@host
+ssh-keygen -t ed25519     # make a key pair
+ssh-copy-id user@host     # install your public key
+scp file user@host:/tmp/
+rsync -av folder/ user@host:folder/
+```
+
+A **key pair** has two parts. The private key stays on your machine and is never shared. The public key goes on the server.
+
+`~/.ssh/config` saves typing:
+
+```
+Host pc
+    HostName 100.x.x.x
+    User kristian
+```
+
+Harden a server in `/etc/ssh/sshd_config`: `PasswordAuthentication no` and `PermitRootLogin no`. Keep your current session open while you test, or you can lock yourself out.
+
+**Port forwarding** reaches a service through SSH:
+
+```bash
+ssh -L 8080:localhost:80 user@host
+```
+
+@task lab 2 SSH between your machines
+Turn on SSH on the Arch laptop. Connect from your Windows PC over Tailscale, using a key rather than a password.
+
+Done when `ssh laptop` from the PC logs in without a password, using a `~/.ssh/config` entry. Windows has `ssh` built in.
+@hint
+`systemctl enable --now sshd`, `ssh-keygen`, `~/.ssh/authorized_keys`, `~/.ssh/config`
+
+@task lab 2 Lock it down
+Turn off password login on the laptop's SSH. Keep one session open while testing.
+
+Done when a password login is refused, and key login still works.
+@hint
+`/etc/ssh/sshd_config`, `sshd -t`, `systemctl restart sshd`, `ssh -o PubkeyAuthentication=no`
+
+@task lab 2 Tunnel to a private service
+Run a web server on the laptop bound to `127.0.0.1`. From the PC, open it in a browser through an SSH tunnel.
+
+Done when the page loads on the PC while the port stays closed to the network.
+@hint
+`ssh -L`, `python -m http.server --bind`
+
+@module Docker
+A **container** is a process with its own files and network, sharing the host's kernel. It starts in moments and behaves the same on every machine. That ends "it works on my laptop".
+
+- **Image**: a read-only template.
+- **Container**: a running copy of an image.
+- **Dockerfile**: the recipe for an image.
+
+```bash
+sudo pacman -S docker
+sudo systemctl enable --now docker
+docker run --rm hello-world
+docker ps -a; docker images; docker logs NAME
+docker exec -it NAME sh
+```
+
+```dockerfile
+FROM python:3.13-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+USER nobody
+EXPOSE 8000
+CMD ["python", "app.py"]
+```
+
+Each line is a cached **layer**. Copy files that change rarely first, so builds stay fast. Use `.dockerignore`. Small base images have fewer security holes. Do not run as root.
+
+```bash
+docker build -t myapp .
+docker run -d -p 8000:8000 --name web myapp
+```
+
+`-p 8000:8000` connects a host port to a container port. Container files disappear with the container, so keep data in a **volume**: `-v data:/var/lib/data`.
+
+Adding yourself to the `docker` group is the same as giving yourself root, so know what it means.
+
+@task lab 1 First containers
+Install Docker on the laptop. Run `nginx` on port 8080, open it in a browser, read its logs, open a shell inside it, then remove it.
+
+Done when `docker ps -a` is empty again.
+@hint
+`docker run -d -p`, `docker logs`, `docker exec -it`, `docker rm -f`
+
+@task lab 2 Containerise your own program
+Write a tiny web server in Python, the one that says hello. Write its Dockerfile and `.dockerignore`, build it, and run it as a non-root user.
+
+Done when it answers on a port, and `docker exec NAME whoami` is not root.
+@hint
+`http.server`, `USER`, `docker build -t`
+
+@task lab 3 Make the image small and fast
+Compare your image size on a full base image and on `slim`. Reorder the Dockerfile so changing your code does not reinstall packages.
+
+Done when `docker history` shows the sizes, and a rebuild after a code change takes seconds.
+@hint
+`docker images`, `docker history`, layer order, multi-stage builds
+
+@task lab 2 Keep data alive
+Run Postgres in a container with a volume. Create a table, delete the container, start a new one on the same volume.
+
+Done when your table survives.
+@hint
+`-e POSTGRES_PASSWORD`, `-v`, `docker exec -it NAME psql -U postgres`
+
+@module Docker Compose
+Real apps have several parts. **Compose** describes them all in one file.
+
+```yaml
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgres://app:${DB_PASSWORD}@db:5432/app
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 5s
+volumes:
+  dbdata:
+```
+
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs -f web
+docker compose down       # add -v to delete the data too
+```
+
+Containers reach each other by service name: `db` above. Secrets go in a `.env` file, which stays out of Git.
+
+@task lab 2 Web app with a database
+Write a small app that counts visits in Postgres. Run both with Compose.
+
+Done when the count survives `docker compose down` and `up`.
+@hint
+`psycopg` or any Postgres library, `depends_on`, a named volume, `.env`
+
+@task lab 3 Add a reverse proxy
+Put `nginx` or `caddy` in front of the app. Only the proxy publishes a port. Run two copies of the app and see requests shared between them.
+
+Done when the app can no longer be reached directly from the host.
+@hint
+`expose` versus `ports`, `proxy_pass`, `docker compose up --scale web=2`
+
+@module CI/CD
+**CI** (continuous integration): every push is built and tested automatically. **CD** (continuous delivery): what passes is shipped automatically. The aim is small, boring, frequent releases.
+
+A typical pipeline: checkout, install, lint, test, build, deploy.
+
+GitHub Actions reads `.github/workflows/*.yml`:
+
+```yaml
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt
+      - run: pytest
+```
+
+Terms: a **workflow** holds **jobs**, jobs hold **steps**, and each job runs on a fresh machine called a **runner**.
+
+Secrets go in the repo's settings and are read with `${{ secrets.NAME }}`. Never print them. Give a deploy token the least power it needs.
+
+If the main branch can break, turn on branch protection so tests must pass before a merge.
+
+Check GitHub's docs for the current version numbers of the actions.
+
+@task lab 1 First pipeline
+Make a small GitHub repo with a Python function and a test. Add a workflow that runs the tests on every push.
+
+Done when you see a green tick on GitHub. Then break the test on purpose and see red.
+@hint
+`pytest`, `.github/workflows/ci.yml`, the Actions tab
+
+@task lab 2 Protect main
+Add a linter step. Turn on branch protection so a PR cannot merge unless the checks pass.
+
+Done when GitHub refuses to merge a failing PR.
+@hint
+`ruff`, repository Settings, branch rules
+
+@task lab 2 Build and publish an image
+Have the workflow build your Docker image and push it to GitHub Container Registry, tagged with the commit hash.
+
+Done when the image shows on your repo's Packages, and you can `docker pull` it on the laptop.
+@hint
+`docker/login-action`, `docker/build-push-action`, `ghcr.io`, `${{ github.sha }}`, `permissions: packages: write`
+
+@task lab 3 Auto-deploy one of your apps
+Make pushing to main deploy Codebit or a test Worker to your **personal** Cloudflare account. Use a limited API token stored as a GitHub secret, never in the repo. Start with a test Worker if you do not want to risk a live app.
+
+Done when a push changes the live site with no action from you.
+@hint
+`cloudflare/wrangler-action`, Cloudflare API tokens, Workers edit permission
+
+@module Cloud basics
+"The cloud" is someone else's computers, rented by the minute and controlled by an API.
+
+- **IaaS**: you rent virtual machines. You manage everything above the hardware. AWS EC2.
+- **PaaS and serverless**: you give it code. Cloudflare Workers, AWS Lambda. Your apps already run this way.
+- **SaaS**: you use the finished product.
+
+Every big cloud has the same core pieces under different names:
+
+- Compute: EC2, Workers, Lambda
+- Storage: S3, Cloudflare R2
+- Database: RDS, D1
+- Network: VPC, load balancers
+- Identity: IAM
+
+**Identity** is the first thing to learn. Give each person and program the least permission that works.
+
+**Scaling:** vertical means a bigger machine. Horizontal means more machines behind a load balancer, which needs apps that keep no state on themselves.
+
+**Reliability:** run in more than one zone. Keep backups, and test restoring them. A backup you never restored is only a hope.
+
+**Cost:** forgotten resources keep charging. If you ever put a card on an account, set a budget alert first, and delete what you stop using. Cloudflare's free tier avoids this.
+
+@task lab 1 Read your own setup
+For Readbit, write down in your own words: where the code runs, where the data lives, what a request passes through, and what happens if your PC is off.
+
+Done when you can draw it on paper from memory.
+@hint
+`wrangler.jsonc`, Cloudflare dashboard, `wrangler whoami`
+
+@task lab 2 Watch live logs and inspect the database
+On a test or personal Worker, stream live logs while you use the app. Then run a read-only query against D1 from the terminal.
+
+Done when you saw your own request in the logs. Use `SELECT` only.
+@hint
+`wrangler tail`, `wrangler d1 execute --remote --command`, `--account-id` or `CLOUDFLARE_ACCOUNT_ID`
+
+@task lab 2 Deploy a new Worker from zero
+With no help from a script, make a Worker with one route that returns JSON, and a secret read from the environment. Deploy it.
+
+Done when it answers on its own URL, and the secret is not in your code.
+@hint
+`npm create cloudflare@latest`, `wrangler deploy`, `wrangler secret put`
+
+@task lab 3 Rollback drill
+Deploy a broken version of your test Worker on purpose. Note the time, then roll back to the good version.
+
+Done when you can do it in under 2 minutes, and have written down the steps.
+@hint
+`wrangler deployments list`, `wrangler rollback`
+
+@module Infrastructure as code
+Clicking in dashboards cannot be reviewed, repeated or undone. **Infrastructure as code** describes servers and settings in files kept in Git.
+
+Terraform (or OpenTofu, its open source twin with the same language) declares what should exist. You do not write steps.
+
+```hcl
+terraform {
+  required_providers {
+    local = { source = "hashicorp/local" }
+  }
+}
+
+resource "local_file" "hello" {
+  filename = "${path.module}/hello.txt"
+  content  = "hello"
+}
+```
+
+```bash
+terraform init
+terraform plan     # what would change
+terraform apply
+terraform destroy
+```
+
+The **state** file records what Terraform manages. It can contain secrets, so keep it out of Git. Teams store it remotely.
+
+**Read the plan** every time. A line starting with `-/+` means something will be deleted and rebuilt.
+
+**Ansible** is the other half: it logs in over SSH and configures machines, using YAML. Terraform creates things, Ansible sets them up.
+
+On Arch, check with `pacman -Ss terraform` and `pacman -Ss opentofu`. For OpenTofu the command is `tofu`.
+
+@task lab 1 Files as infrastructure
+Using only the `local` provider, manage 3 files from a variable. Change one file by hand, then see `plan` detect it.
+
+Done when `plan` shows your hand change, and `apply` fixes it.
+@hint
+`variable`, `for_each`, `terraform plan`
+
+@task lab 2 Docker with Terraform
+Use the Docker provider to run `nginx` from Terraform.
+
+Done when `apply` starts it, and `destroy` removes it.
+@hint
+`kreuzwerker/docker` provider, `docker_image`, `docker_container`
+
+@task lab 3 Configure a machine with Ansible
+Write a playbook that runs against your laptop or a test container, and makes sure a package is installed and a config file exists. Run it twice.
+
+Done when the second run reports nothing changed. That property is called idempotence.
+@hint
+`ansible-playbook`, `inventory`, `ansible.builtin.copy`, `--check`
+
+@module Kubernetes
+Docker runs containers on one machine. **Kubernetes** runs them across many, restarts failures, and rolls out updates. You declare what you want, and it keeps making that true.
+
+- **Pod**: one or more containers together. The smallest unit.
+- **Deployment**: keeps N copies of a Pod and handles updates.
+- **Service**: a stable address in front of Pods.
+- **Ingress**: lets outside traffic in.
+- **ConfigMap, Secret**: settings for Pods.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: web }
+  template:
+    metadata:
+      labels: { app: web }
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+```
+
+```bash
+minikube start
+kubectl apply -f web.yaml
+kubectl get pods
+kubectl describe pod NAME    # read Events at the bottom when stuck
+kubectl logs NAME
+kubectl rollout undo deployment/web
+```
+
+You may never need it for small apps, but most DevOps jobs ask for it.
+
+@task lab 2 Run a small cluster
+Install `minikube` and `kubectl`. Deploy nginx with 3 replicas and a Service. Delete a Pod and watch it come back.
+
+Done when `kubectl get pods -w` shows the replacement.
+@hint
+`minikube start --driver=docker`, `kubectl expose`, `minikube service`
+
+@task lab 3 Rolling update and rollback
+Update the image, watch the rollout, then set a broken image tag and roll back.
+
+Done when you saw `ImagePullBackOff`, found it with `describe`, and undid it.
+@hint
+`kubectl set image`, `kubectl rollout status`, `kubectl rollout undo`
+
+@task lab 3 Your own image in Kubernetes
+Deploy your Python app. Put a setting in a ConfigMap and read it as an environment variable. Add a readiness probe.
+
+Done when changing the ConfigMap and restarting changes what the app shows.
+@hint
+`minikube image load`, `envFrom`, `readinessProbe`, `kubectl rollout restart`
+
+@module Monitoring and incidents
+You cannot fix what you cannot see.
+
+- **Logs**: what happened.
+- **Metrics**: numbers over time, such as CPU, errors, response time.
+- **Traces**: one request's path through many services.
+
+Watch the four golden signals: **latency, traffic, errors, saturation**.
+
+Common tools: **Prometheus** collects metrics, **Grafana** draws them, **Alertmanager** sends alerts. An alert should mean a person must act. Noisy alerts get ignored.
+
+When something breaks:
+
+- Stop the damage first: roll back before you investigate.
+- Write down what you see and when.
+- Change one thing at a time.
+- Afterwards, write a **postmortem**: what happened, why, what stops it happening again. Blame the system, not the person.
+
+**Backups:** keep 3 copies, on 2 kinds of storage, with 1 off-site. Test restoring.
+
+**Security basics:** update software, keep few open ports, use keys over passwords, store secrets outside code, and give least privilege.
+
+@task lab 2 Prometheus and Grafana
+With Compose, run Prometheus, Grafana and `node-exporter`. Build a dashboard of your laptop's CPU, memory and disk.
+
+Done when the dashboard shows live numbers.
+@hint
+`prom/prometheus`, `grafana/grafana`, `prom/node-exporter`, `prometheus.yml`
+
+@task lab 2 Uptime alert
+Use your health check script on a systemd timer. Make it send you a notification when a site fails.
+
+Done when a fake failing URL reaches your phone. A free service like ntfy works with `curl`.
+@hint
+`ntfy.sh`, `curl -d`, keep your topic name private
+
+@task lab 2 Backup and real restore
+Back up the database from your Compose app with a script, delete the data, and restore it.
+
+Done when the app works again, and you timed the restore.
+@hint
+`pg_dump`, `psql`, `docker compose exec -T`
+
+@task lab 3 Break it, then write a postmortem
+Stop the database in your Compose app with no warning, and fill the app's logs with errors. Find the cause using only logs and metrics. Then write a one-page postmortem.
+
+Done when the postmortem has a timeline, the cause, and two changes you would make.
+@hint
+`docker compose logs`, `docker stats`, Grafana
+
+@module Final project: ship it for real
+Put everything together, with no steps given. This is what you can show on a CV or in an interview, so make the repo public and keep secrets out.
+
+The goal: one small app of your own idea, with a database, built and shipped like a professional team would do it.
+
+Write the README last, with a diagram of how it all fits together. In an interview you will be asked why you chose each part, so keep notes on your decisions.
+
+@task lab 2 Plan and containerise
+Choose the app. Write a short plan: parts, ports, data, risks. Build it with Docker and Compose.
+
+Done when a stranger could run it with one command from your README.
+@hint
+`docker compose up`, `.env.example`
+
+@task lab 3 Pipeline
+Add tests, a linter and an image build, running on every pull request. Use protected main.
+
+Done when bad code cannot reach main.
+@hint
+GitHub Actions, branch rules, GHCR
+
+@task lab 3 Deploy with no hands
+Make a merge to main update the running app on your laptop over Tailscale, or on Cloudflare. It must be able to roll back.
+
+Done when a merge goes live with no manual step, and you have done one rollback.
+@hint
+GitHub Actions, a self-hosted runner or Tailscale action, image tags as versions
+
+@task lab 3 Run it like production
+Add monitoring, an alert, automatic backups and a tested restore. Write a short runbook: how to restart, roll back and restore.
+
+Done when someone else could keep it running using only your runbook.
+@hint
+Prometheus, Grafana, systemd timers, `pg_dump`
+
+@task lab 3 Show it
+Publish the repo with the README, diagram, screenshots and what you would do next. Check the history for secrets first.
+
+Done when you can explain the whole system out loud in 5 minutes.
+@hint
+`git log -p | grep -i`, `gitleaks`

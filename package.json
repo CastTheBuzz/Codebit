@@ -1,0 +1,9 @@
+{
+  "name": "codebit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Personal programming course: roadmap, theory, tasks, run on phone and PC",
+  "dependencies": { "@yowasp/clang": "22.0.0-git20542-10", "pyodide": "314.0.7", "sql.js": "1.15.2" },
+  "devDependencies": { "wrangler": "^4.156.0" }
+}

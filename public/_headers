@@ -1,0 +1,7 @@
+/rt/*
+  Cache-Control: public, max-age=86400
+/sw.js
+  Cache-Control: no-cache
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer

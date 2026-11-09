@@ -1,0 +1,15 @@
+{
+  "name": "Codebit",
+  "short_name": "Codebit",
+  "description": "Your own programming course: roadmap, theory and tasks that run on your device.",
+  "start_url": "/#/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f1f4f6",
+  "theme_color": "#20345f",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
